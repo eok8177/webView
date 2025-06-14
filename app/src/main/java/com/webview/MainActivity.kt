@@ -2,10 +2,16 @@ package com.webview
 
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.webkit.*
 import android.widget.Toast
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -15,31 +21,64 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private val PERMISSIONS_REQUEST_CODE = 100
 
+    // For handling file uploads
+    private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+    private lateinit var filePickerLauncher: ActivityResultLauncher<Intent>
+
     // List of required permissions (reduced for stability)
     private val requiredPermissions = arrayOf(
         Manifest.permission.CAMERA,
-        Manifest.permission.RECORD_AUDIO
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.READ_EXTERNAL_STORAGE,
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         try {
-            // Option 1: Create layout programmatically (without XML file)
+            initializeFilePickerLauncher()
+
             createLayoutProgrammatically()
 
-            // Check and request permissions
             checkAndRequestPermissions()
 
-            // WebView setup
             setupWebView()
 
-            // Load the web page (start with a simple site)
             webView.loadUrl("https://app.streaming.abovedemo.com/")
-
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Initialization error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun initializeFilePickerLauncher() {
+        filePickerLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result: ActivityResult ->
+            handleFilePickerResult(result)
+        }
+    }
+
+    private fun handleFilePickerResult(result: ActivityResult) {
+        try {
+            if (result.resultCode == Activity.RESULT_OK) {
+                val data = result.data
+                val uriResults = mutableListOf<Uri>()
+
+                // Handle single file
+                data?.data?.let { uri ->
+                    uriResults.add(uri)
+                }
+
+                fileUploadCallback?.onReceiveValue(uriResults.toTypedArray())
+            } else {
+                fileUploadCallback?.onReceiveValue(null)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            fileUploadCallback?.onReceiveValue(null)
+        } finally {
+            fileUploadCallback = null
         }
     }
 
@@ -96,7 +135,6 @@ class MainActivity : AppCompatActivity() {
 
             if (!allPermissionsGranted) {
                 // If permissions are not granted, you can show a message to the user
-                // or restrict functionality
             }
         }
     }
@@ -167,6 +205,28 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
+                // Handle file selection (Android 5.0+)
+                override fun onShowFileChooser(
+                    webView: WebView?,
+                    filePathCallback: ValueCallback<Array<Uri>>?,
+                    fileChooserParams: FileChooserParams?
+                ): Boolean {
+                    return try {
+                        // Cancel previous callback if it exists
+                        fileUploadCallback?.onReceiveValue(null)
+                        fileUploadCallback = filePathCallback
+
+                        // Create Intent for file selection
+                        val intent = createFileChooserIntent(fileChooserParams)
+                        filePickerLauncher.launch(intent)
+                        true
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        filePathCallback?.onReceiveValue(null)
+                        false
+                    }
+                }
+
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                     // Logging JavaScript errors
                     consoleMessage?.let {
@@ -180,6 +240,24 @@ class MainActivity : AppCompatActivity() {
             e.printStackTrace()
             Toast.makeText(this, "WebView setup error: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun createFileChooserIntent(fileChooserParams: WebChromeClient.FileChooserParams?): Intent {
+        val intent = Intent(Intent.ACTION_GET_CONTENT)
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
+
+        // Determine file type based on parameters
+        val acceptTypes = fileChooserParams?.acceptTypes
+        if (!acceptTypes.isNullOrEmpty() && acceptTypes[0].isNotEmpty()) {
+            intent.type = acceptTypes[0]
+        } else {
+            intent.type = "*/*" // All file types
+        }
+
+        // Create chooser with additional options
+        val chooserIntent = Intent.createChooser(intent, "Chose the file")
+
+        return chooserIntent
     }
 
     // Handle the "Back" button
