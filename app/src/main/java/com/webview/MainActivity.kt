@@ -170,14 +170,14 @@ class MainActivity : AppCompatActivity() {
                     return false  // Allow WebView to handle the URL
                 }
 
-                override fun onReceivedError(
-                    view: WebView?,
-                    request: WebResourceRequest?,
-                    error: WebResourceError?
-                ) {
-                    super.onReceivedError(view, request, error)
-                    Toast.makeText(this@MainActivity, "Loading error: ${error?.description}", Toast.LENGTH_SHORT).show()
-                }
+                // override fun onReceivedError(
+                //     view: WebView?,
+                //     request: WebResourceRequest?,
+                //     error: WebResourceError?
+                // ) {
+                //     super.onReceivedError(view, request, error)
+                //     Toast.makeText(this@MainActivity, "Loading error: ${error?.description}", Toast.LENGTH_SHORT).show()
+                // }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
